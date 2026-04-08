@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "SmartTravel",
+  "version": "10.1.0",
+  "description": "Smart, Claude-powered context-aware travel companion.",
+  "permissions": ["activeTab", "storage", "scripting"],
+  "host_permissions": [
+    "https://api.anthropic.com/*",
+    "*://*.google.com/flights*",
+    "*://*.google.com/search*",
+    "*://*.makemytrip.com/*",
+    "*://*.skyscanner.com/*",
+    "*://*.skyscanner.co.in/*",
+    "*://*.skyscanner.net/*",
+    "*://*.kayak.com/*",
+    "*://*.expedia.com/*",
+    "*://*.goindigo.in/*",
+    "*://*.airindia.com/*",
+    "*://*.airindia.in/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "action": {
+    "default_title": "SmartTravel Settings"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["ui/widget.html", "ui/widget.css"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

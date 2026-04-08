@@ -1,0 +1,39 @@
+<div id="smarttravel-widget" class="collapsed">
+  <div class="st-handle" id="st-toggle">
+    <span class="st-icon">✈️</span>
+  </div>
+  <div class="st-content">
+    <div class="st-header">
+      <div class="st-logo-row">
+        <span class="st-pulse"></span>
+        <h2>SmartTravel</h2>
+      </div>
+      <div class="st-context" id="st-context-info">Detecting trip...</div>
+    </div>
+    <div id="st-fallback-form" class="hidden">
+      <label class="st-label">Origin</label>
+      <input type="text" id="st-origin-input" placeholder="e.g., New York">
+      <label class="st-label">Destination</label>
+      <input type="text" id="st-dest-input" placeholder="e.g., Tokyo">
+      <label class="st-label">Start Date</label>
+      <input type="date" id="st-start-input">
+      <label class="st-label">End Date</label>
+      <input type="date" id="st-end-input">
+      <button id="st-submit-manual">Get Premium Insights</button>
+    </div>
+    <div id="st-main-view" class="hidden">
+      <div class="st-tabs">
+        <button class="st-tab active" data-tab="packing">Packing</button>
+        <button class="st-tab" data-tab="attractions">Explore</button>
+        <button class="st-tab" data-tab="food">Dining</button>
+        <button class="st-tab" data-tab="transport">Transit</button>
+      </div>
+      <div class="st-tab-contents">
+        <div id="tab-packing" class="st-tab-panel active"></div>
+        <div id="tab-attractions" class="st-tab-panel"></div>
+        <div id="tab-food" class="st-tab-panel"></div>
+        <div id="tab-transport" class="st-tab-panel"></div>
+      </div>
+    </div>
+  </div>
+</div>
