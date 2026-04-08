@@ -101,19 +101,26 @@
     scheduleNext(500);
   };
 
+  let pageObserver = null;
+
   const initObserver = () => {
     if (document.body) {
       injectWidgetInstantly().then(() => {
         startExtractionLoop();
-        new MutationObserver(() => {
+        pageObserver = new MutationObserver(() => {
           extractAndSync();
-        }).observe(document, { subtree: true, childList: true, characterData: true });
+        });
+        pageObserver.observe(document, { subtree: true, childList: true, characterData: true });
       });
     } else {
       setTimeout(initObserver, 20);
     }
   };
   initObserver();
+
+  window.addEventListener('beforeunload', () => {
+    if (pageObserver) pageObserver.disconnect();
+  });
 
   function extractFlightInfo() {
     const url = window.location.href;
