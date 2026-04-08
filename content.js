@@ -305,11 +305,16 @@
 
   function fetchData(force = false, skipCache = false) {
     const requestId = ++currentRequestId;
-    if (currentController) currentController.abort();
+
+    // Abort any in-flight request and replace the controller
+    if (currentController) {
+      currentController.abort();
+    }
     currentController = new AbortController();
+    const { signal } = currentController;
 
     const categories = ['packing', 'attractions', 'food', 'transport'];
-    
+
     const existingBanner = shadowRoot.getElementById('st-error-banner');
     if (existingBanner) existingBanner.remove();
 
@@ -318,16 +323,20 @@
     });
 
     const payload = {
-       origin: tripState.origin || '',
-       dest: tripState.destination || '',
-       start: tripState.startDate || '',
-       end: tripState.endDate || ''
+      origin: tripState.origin || '',
+      dest: tripState.destination || '',
+      start: tripState.startDate || '',
+      end: tripState.endDate || ''
     };
 
     console.log("LLM Request:", payload);
 
     chrome.runtime.sendMessage({ action: 'fetchTripData', data: payload, force: force || skipCache }, (response) => {
-      if (requestId !== currentRequestId) return; // ignore stale response
+      // Discard if a newer request has been issued or this one was aborted
+      if (requestId !== currentRequestId || signal.aborted) return;
+
+      // Request is settled — release the controller
+      currentController = null;
 
       let dataToRender = response?.data;
 
