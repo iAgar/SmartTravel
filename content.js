@@ -165,10 +165,30 @@
         if (!dest && destMatch) dest = destMatch[1].trim();
       }
 
-      const dateRegex = /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s?\d{1,2}/g;
-      const allDates = docText.match(dateRegex);
-      
-      if (allDates && allDates.length > 0) {
+      // Multi-pattern date extraction — handles English, European, numeric, and URL-encoded formats
+      const datePatterns = [
+        // English: Jan 5, Feb 23, Dec 1
+        /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s?\d{1,2}/gi,
+        // Spanish/French/Italian/Portuguese months
+        /(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic|janv?|f[eé]vr?|avr|ao[uû]t|d[eé]c|gen|fev|set)\s?\d{1,2}/gi,
+        // ISO / URL date: 2024-03-15 or 20240315
+        /\b(20\d{2}[-\/]\d{2}[-\/]\d{2})\b/g,
+        // DD/MM/YYYY or DD-MM-YYYY (European)
+        /\b(\d{1,2}[\/\-]\d{1,2}[\/\-]20\d{2})\b/g,
+        // DD Mon YYYY: 5 Mar 2024
+        /\b\d{1,2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+20\d{2}\b/gi,
+      ];
+
+      const seenDates = new Set();
+      const allDates = [];
+      for (const pattern of datePatterns) {
+        const matches = docText.match(pattern) || [];
+        for (const m of matches) {
+          if (!seenDates.has(m)) { seenDates.add(m); allDates.push(m); }
+        }
+      }
+
+      if (allDates.length > 0) {
         start = allDates[0];
         if (allDates.length > 1) {
           end = allDates[1];
