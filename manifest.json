@@ -5,7 +5,7 @@
   "description": "Smart, Claude-powered context-aware travel companion.",
   "permissions": ["activeTab", "storage", "scripting"],
   "host_permissions": [
-    "https://api.anthropic.com/*",
+    "https://smarttravel-proxy.YOUR_SUBDOMAIN.workers.dev/*",
     "*://*.google.com/flights*",
     "*://*.google.com/search*",
     "*://*.makemytrip.com/*",

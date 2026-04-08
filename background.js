@@ -1,17 +1,7 @@
-const DEFAULT_ANTHROPIC_KEY = ''; // Set via options page (chrome.storage)
-
-// Provider configuration — extend providers object to add future fallbacks
-const API_CONFIG = {
-  provider: 'anthropic',
-  providers: {
-    anthropic: {
-      endpoint: 'https://api.anthropic.com/v1/messages',
-      model: 'claude-3-haiku-20240307',
-      version: '2023-06-01'
-    }
-    // future: { openai: {...}, backend: { endpoint: '/api/travel-insights' } }
-  }
-};
+// ─── Proxy configuration ──────────────────────────────────────────────────────
+// After deploying the Cloudflare Worker, replace this URL with your worker URL.
+// Format: https://smarttravel-proxy.YOUR_SUBDOMAIN.workers.dev/api/travel-insights
+const PROXY_ENDPOINT = 'https://smarttravel-proxy.YOUR_SUBDOMAIN.workers.dev/api/travel-insights';
 
 let cooldownUntil = 0;
 const activeRequests = new Map();
@@ -36,7 +26,7 @@ async function handleFetchData(info, force = false) {
   }
 
   const fetchPromise = new Promise((resolve) => {
-    chrome.storage.local.get([cacheKey, 'anthropicApiKey'], async (result) => {
+    chrome.storage.local.get([cacheKey], async (result) => {
       // 2. 24-hour local cache check
       if (result[cacheKey] && !force) {
         const entry = result[cacheKey];
@@ -48,7 +38,7 @@ async function handleFetchData(info, force = false) {
         console.log(`[Cache Miss] Stale entry discarded (>24h TTL)`);
       }
 
-      // 3. Rate limit gate
+      // 3. Rate limit gate (local cooldown after upstream 429)
       if (Date.now() < cooldownUntil) {
         const remaining = Math.ceil((cooldownUntil - Date.now()) / 1000);
         console.warn(`[Rate Limited] Cooling for ${remaining}s`);
@@ -56,23 +46,16 @@ async function handleFetchData(info, force = false) {
         return;
       }
 
-      // 4. API key resolution: user key → default key
-      const apiKey = result.anthropicApiKey || DEFAULT_ANTHROPIC_KEY;
-      if (!apiKey) {
-        resolve({ error: 'LLM_KEY_MISSING' });
-        return;
-      }
-
-      // 5. Scarce network call through abstract layer
+      // 4. Call proxy
       try {
         console.log(`[API Call] Fetching insights for: ${info.dest}`);
-        const data = await callWithRetry(info, apiKey, 1);
+        const data = await callWithRetry(info, 1);
         chrome.storage.local.set({ [cacheKey]: { data, timestamp: Date.now() } });
         resolve({ source: 'api', data });
       } catch (e) {
         console.error('[SmartTravel] Fatal error:', e.message, e);
         if (e.message.includes('429')) {
-          cooldownUntil = Date.now() + 35000; // 35s hard cooldown
+          cooldownUntil = Date.now() + 35000; // 35s local cooldown
           resolve({ error: 'RATE_LIMIT_COOLDOWN', remaining: 35 });
         } else {
           resolve({ error: e.message });
@@ -93,125 +76,66 @@ async function handleFetchData(info, force = false) {
 }
 
 // One silent retry on transient errors; never retry rate limits
-async function callWithRetry(info, apiKey, retries = 1) {
+async function callWithRetry(info, retries = 1) {
   try {
-    return await getTravelInsights(info, apiKey);
+    return await getTravelInsights(info);
   } catch (error) {
     if (error.message.includes('429')) throw error;
     if (retries > 0) {
       console.warn('[Retry] Transient error, retrying in 500ms...');
       await new Promise(r => setTimeout(r, 500));
-      return await callWithRetry(info, apiKey, retries - 1);
+      return await callWithRetry(info, retries - 1);
     }
     throw error;
   }
 }
 
-// ─── Abstract API Layer ────────────────────────────────────────────────────────
-// All travel insight requests funnel through here.
-// Future swap: replace body with fetch('/api/travel-insights', { method: 'POST', body: JSON.stringify(info) })
-async function getTravelInsights(info, apiKey) {
-  return await callProvider(API_CONFIG.provider, info, apiKey);
+// ─── Abstract API layer ───────────────────────────────────────────────────────
+// All insight requests go through here.
+// To switch providers or go direct: replace callProxy() body only.
+async function getTravelInsights(info) {
+  return await callProxy(info);
 }
 
-async function callProvider(provider, info, apiKey) {
-  const config = API_CONFIG.providers[provider];
-  if (!config) throw new Error(`Unknown provider: ${provider}`);
-
-  switch (provider) {
-    case 'anthropic':
-      return await callAnthropicAPI(info, apiKey, config);
-    default:
-      throw new Error(`No implementation for provider: ${provider}`);
-  }
-}
-// ──────────────────────────────────────────────────────────────────────────────
-
-async function callAnthropicAPI(info, apiKey, config) {
-  const prompt = buildPrompt(info);
-
+async function callProxy(info) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  const timeoutId  = setTimeout(() => controller.abort(), 10000);
 
-  console.log('[Anthropic] API request sent', { model: config.model, dest: info.dest });
+  console.log('[Proxy] API request sent', { dest: info.dest });
 
   let response;
   try {
-    response = await fetch(config.endpoint, {
+    response = await fetch(PROXY_ENDPOINT, {
       method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': config.version,
-        'content-type': 'application/json'
-      },
+      headers: { 'content-type': 'application/json' },
       signal: controller.signal,
-      body: JSON.stringify({
-        model: config.model,
-        max_tokens: 800,
-        messages: [{ role: 'user', content: prompt }]
-      })
+      body: JSON.stringify(info)
     });
   } catch (networkError) {
     clearTimeout(timeoutId);
-    console.error('[Anthropic] Network error:', networkError.message, networkError);
+    console.error('[Proxy] Network error:', networkError.message, networkError);
     throw new Error(`Network error: ${networkError.message}`);
   }
 
   clearTimeout(timeoutId);
-  console.log('[Anthropic] Response received — Status:', response.status);
+  console.log('[Proxy] Response received — Status:', response.status);
 
   if (!response.ok) {
     const errText = await response.text();
-    console.error(`[Anthropic] API error — Status: ${response.status} — Body: ${errText}`);
+    console.error(`[Proxy] Error — Status: ${response.status} — Body: ${errText}`);
     if (response.status === 429) throw new Error('429: Too Many Requests');
-    throw new Error(`API ${response.status}: ${errText}`);
+    if (response.status === 403) throw new Error('403: Access denied');
+    throw new Error(`Proxy ${response.status}: ${errText}`);
   }
 
-  const result = await response.json();
-  console.log('[Anthropic] Response JSON parsed');
-  const textContent = result.content[0].text;
-  console.log('[Anthropic] Raw text content:', textContent);
+  const data = await response.json();
+  console.log('[Proxy] Response JSON parsed');
 
-  return parseAndValidate(textContent);
-}
+  // Normalize missing sections to empty arrays
+  if (!Array.isArray(data.packing))     data.packing     = [];
+  if (!Array.isArray(data.attractions)) data.attractions = [];
+  if (!Array.isArray(data.food))        data.food        = [];
+  if (!Array.isArray(data.transport))   data.transport   = [];
 
-function buildPrompt(info) {
-  return `You are a fast, expert travel assistant. Trip: ${info.origin || 'Unknown origin'} → ${info.dest} (${info.start}–${info.end}).
-
-Output ONLY valid JSON. No markdown. No explanation. No extra text.
-
-{
-  "packing": [{"item": "Item name", "reason": "Specific weather/culture/activity reason tied to destination and dates"}],
-  "attractions": [{"name": "Attraction name", "query": "Google search query", "reason": "Why this specific place is unmissable in ${info.dest}"}],
-  "food": [{"name": "Restaurant or dish", "query": "Google search query", "reason": "Why this is the authentic or best choice here"}],
-  "transport": [{"mode": "Transport mode", "details": "Route or timing info", "reason": "Why this is the smartest option for this trip"}]
-}
-
-Rules:
-- Max 5 items per section
-- Every "reason" must be specific — mention weather, geography, culture, or local context
-- Never use generic reasons like "it's popular" or "very convenient"
-- Attractions and food reasons must reference what makes them unique to ${info.dest}`;
-}
-
-function parseAndValidate(text) {
-  let json;
-  try {
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('No JSON found in response');
-    json = JSON.parse(match[0]);
-  } catch (e) {
-    console.error('[Parse Error]', e.message);
-    throw new Error('Parsing error');
-  }
-
-  if (!json || typeof json !== 'object') throw new Error('Parsing error');
-
-  // Lenient validation — normalize missing sections to empty arrays
-  if (!Array.isArray(json.packing)) json.packing = [];
-  if (!Array.isArray(json.attractions)) json.attractions = [];
-  if (!Array.isArray(json.food)) json.food = [];
-  if (!Array.isArray(json.transport)) json.transport = [];
-
-  return json;
+  return data;
 }
