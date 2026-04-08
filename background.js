@@ -58,7 +58,7 @@ async function handleFetchData(info, force = false) {
 
       // 4. API key resolution: user key → default key
       const apiKey = result.anthropicApiKey || DEFAULT_ANTHROPIC_KEY;
-      if (!apiKey || apiKey === 'ENTER_DEFAULT_ANTHROPIC_KEY_HERE') {
+      if (!apiKey) {
         resolve({ error: 'LLM_KEY_MISSING' });
         return;
       }
