@@ -77,27 +77,28 @@
   let extractionInterval = null;
 
   const startExtractionLoop = () => {
-    if (extractionInterval) clearInterval(extractionInterval);
+    if (extractionInterval) clearTimeout(extractionInterval);
     extractionRetries = 0;
-    
-    // Initial run
-    extractAndSync();
-    
-    extractionInterval = setInterval(() => {
-      extractAndSync();
-      
-      const hasDest = !!tripState.destination;
-      const hasDate = !!(tripState.startDate || tripState.endDate);
-      
-      if (hasDest && hasDate) {
-        clearInterval(extractionInterval);
-      } else {
+
+    const scheduleNext = (delay) => {
+      extractionInterval = setTimeout(() => {
+        extractAndSync();
+
+        const hasDest = !!tripState.destination;
+        const hasDate = !!(tripState.startDate || tripState.endDate);
+
+        if (hasDest && hasDate) return; // Success — stop polling
+
         extractionRetries++;
-        if (extractionRetries >= 10) {
-          clearInterval(extractionInterval);
-        }
-      }
-    }, 500);
+        if (extractionRetries >= 30) return; // Limit reached — give up
+
+        // Exponential backoff: 500ms → 1s → 2s → 4s (capped)
+        scheduleNext(Math.min(delay * 2, 4000));
+      }, delay);
+    };
+
+    extractAndSync(); // Immediate first run
+    scheduleNext(500);
   };
 
   const initObserver = () => {
