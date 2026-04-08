@@ -102,6 +102,7 @@
   };
 
   let pageObserver = null;
+  let initRetries = 0;
 
   const initObserver = () => {
     if (document.body) {
@@ -113,6 +114,11 @@
         pageObserver.observe(document, { subtree: true, childList: true, characterData: true });
       });
     } else {
+      initRetries++;
+      if (initRetries >= 500) {
+        console.warn('[SmartTravel] document.body never appeared — giving up after 10s');
+        return;
+      }
       setTimeout(initObserver, 20);
     }
   };
