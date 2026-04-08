@@ -35,14 +35,12 @@
       shadowRoot.innerHTML = `<style>${cssRes}</style>${htmlRes}`;
       document.body.appendChild(container);
       console.log("[SmartTravel] Widget injected");
-      
+
+      const widget = shadowRoot.getElementById('smarttravel-widget');
+      if (widget) widget.classList.remove('collapsed');
+
       setupEventListeners(shadowRoot);
       setWidgetStateLoading(); // Instant Skeleton loader baseline
-      
-      requestAnimationFrame(() => {
-         const widget = shadowRoot.getElementById('smarttravel-widget');
-         if(widget) widget.classList.remove('collapsed');
-      });
     } catch (e) {
       console.error('[SmartTravel] Injection failed:', e);
     }
@@ -271,7 +269,7 @@
     }
   }
 
-  function fetchData(force = false) {
+  function fetchData(force = false, skipCache = false) {
     const requestId = ++currentRequestId;
     if (currentController) currentController.abort();
     currentController = new AbortController();
@@ -294,7 +292,7 @@
 
     console.log("LLM Request:", payload);
 
-    chrome.runtime.sendMessage({ action: 'fetchTripData', data: payload, force: force }, (response) => {
+    chrome.runtime.sendMessage({ action: 'fetchTripData', data: payload, force: force || skipCache }, (response) => {
       if (requestId !== currentRequestId) return; // ignore stale response
 
       let dataToRender = response?.data;
@@ -370,6 +368,7 @@
   }
 
   function renderPacking(shadow, items) {
+    if (!shadow) return;
     if (!items || !items.length) { shadow.getElementById('tab-packing').innerHTML = '<p class="empty-state">No specific items.</p>'; return; }
     shadow.getElementById('tab-packing').innerHTML = `<ul class="st-cards">${items.map(i => `
       <li class="st-card">
@@ -383,6 +382,7 @@
   }
 
   function renderClickableList(shadow, tab, items) {
+    if (!shadow) return;
     if (!items || !items.length) { shadow.getElementById(`tab-${tab}`).innerHTML = '<p class="empty-state">Nothing found.</p>'; return; }
     const icon = tab === 'food' ? '🍽️' : '📍';
     shadow.getElementById(`tab-${tab}`).innerHTML = `<ul class="st-cards">${items.map(i => `
@@ -399,6 +399,7 @@
   }
 
   function renderTransport(shadow, options) {
+    if (!shadow) return;
     if (!options || !options.length) { shadow.getElementById('tab-transport').innerHTML = '<p class="empty-state">No options.</p>'; return; }
     shadow.getElementById('tab-transport').innerHTML = `<ul class="st-cards">${options.map(o => `
       <li class="st-card">
